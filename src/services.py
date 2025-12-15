@@ -1,12 +1,12 @@
 import numpy as np
 from typing import Optional
 from .models import Usuario, ResultadoExperimento, TipoUsuario
-from .repository import MemoriaRepository
+from .repository import SQLiteRepository
 
 
 class SistemaService:
     def __init__(self) -> None:
-        self.repo = MemoriaRepository()
+        self.repo = SQLiteRepository()
 
     # ---------- Usuários ----------
 
