@@ -208,43 +208,47 @@ def tela_resultados():
         st.warning("Faça login ou cadastro antes de ver os resultados.")
         return
 
+    # pega o último experimento desse usuário
     res = service.obter_ultimo_resultado(usuario.email)
-    st.markdown("<h1 style='text-align:center;'>Resultados do Experimento</h1>", unsafe_allow_html=True)
+
+    st.markdown(
+        "<h1 style='text-align:center;'>Resultados do Experimento</h1>",
+        unsafe_allow_html=True,
+    )
 
     if res is None:
         st.markdown(
             "<p style='text-align:center; color:gray;'>Nenhuma simulação foi executada ainda.</p>",
-            unsafe_allow_html=True
+            unsafe_allow_html=True,
         )
         return
 
+    # cards individuais
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Altura máxima (m)", f"{res.altura_maxima:.2f}")
     with col2:
-        st.metric("Erro médio", f"{res.erro_medio:.2f}")
+        st.metric("Erro médio", f"{res.erro_medio:.4f}")
     with col3:
         st.metric("Tempo total (s)", f"{res.tempo_total}")
 
     st.divider()
 
-    df = pd.DataFrame({
-        "Tempo (s)": res.tempo,
-        "Nível ideal (m)": res.nivel_ideal,
-        "Nível aluno (m)": res.nivel_aluno,
-    })
+    # TABELA RESUMO (uma linha para o usuário logado)
+    st.subheader("Resultados em tabela")
 
-    st.subheader("Dados em tabela")
-    st.dataframe(df)
-
-    csv = df.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "Exportar CSV",
-        data=csv,
-        file_name="resultados_tanque.csv",
-        mime="text/csv"
+    df_resumo = pd.DataFrame(
+        [
+            {
+                "Nome do usuário": usuario.nome,
+                "Altura máxima (m)": res.altura_maxima,
+                "Erro médio": res.erro_medio,
+                "Tempo total (s)": res.tempo_total,
+            }
+        ]
     )
 
+    st.dataframe(df_resumo)
 
 # ---------------- ROTEAMENTO ----------------
 pagina = st.session_state["pagina"]

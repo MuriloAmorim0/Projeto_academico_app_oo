@@ -1,5 +1,6 @@
 import numpy as np
 from typing import Optional
+
 from .models import Usuario, ResultadoExperimento, TipoUsuario
 from .repository import SQLiteRepository
 
@@ -28,7 +29,7 @@ class SistemaService:
         self.repo.salvar_usuario(novo)
         return novo
 
-    # ---------- Experimento ----------
+    # ---------- Experimento (função de transferência) ----------
 
     def rodar_experimento(
         self,
@@ -38,12 +39,39 @@ class SistemaService:
         vazao_saida: float,
         altura_max: float,
     ) -> ResultadoExperimento:
-        """Simulação simples, apenas para fins de layout."""
-        tempo = np.linspace(0, tempo_total, tempo_total)
-        nivel_ideal = altura_max * (1 - np.exp(-tempo / 30))
-        nivel_aluno = nivel_ideal + np.random.normal(0, 0.5, tempo_total)
+        """
+        Modelo determinístico baseado em função de transferência de 1ª ordem:
 
-        erro_medio = float(np.mean(np.abs(nivel_aluno - nivel_ideal)))
+            G(s) = K / (tau*s + 1)
+
+        Resposta ao degrau de amplitude U:
+
+            h(t) = K*U*(1 - exp(-t/tau))
+
+        Aqui K e tau são fixos, para que, com os mesmos parâmetros,
+        o gráfico gere sempre os mesmos valores.
+        """
+
+        # vetor de tempo: 0, 1, 2, ..., tempo_total-1
+        tempo = np.linspace(0.0, float(tempo_total), int(tempo_total))
+
+        # entrada (degrau) – usamos a vazão de entrada como amplitude
+        U = max(float(vazao_entrada), 0.1)
+
+        # parâmetros fixos da função de transferência
+        # ganho estático: em regime o nível tende à altura_max
+        K = altura_max / U
+        tau = 30.0  # constante de tempo (ajuste didático)
+
+        # resposta ideal do tanque (modelo teórico)
+        nivel_ideal = K * U * (1.0 - np.exp(-tempo / tau))
+        nivel_ideal = np.clip(nivel_ideal, 0.0, float(altura_max))
+
+        # resposta do "aluno" SEM ruído: segue exatamente o modelo
+        nivel_aluno = nivel_ideal.copy()
+
+        # métricas
+        erro_medio = float(np.mean(np.abs(nivel_aluno - nivel_ideal)))  # ≈ 0
         altura_maxima = float(np.max(nivel_aluno))
 
         resultado = ResultadoExperimento(
@@ -57,6 +85,8 @@ class SistemaService:
 
         self.repo.salvar_resultado(email_usuario, resultado)
         return resultado
+
+    # ---------- Consulta ----------
 
     def obter_ultimo_resultado(self, email_usuario: str) -> Optional[ResultadoExperimento]:
         return self.repo.obter_resultado(email_usuario)
