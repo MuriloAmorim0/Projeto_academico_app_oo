@@ -4,7 +4,6 @@ from typing import Dict, Optional
 
 from .models import Usuario, ResultadoExperimento
 
-
 DB_PATH = Path("experimento_tanque.db")
 
 
@@ -45,6 +44,8 @@ class SQLiteRepository:
     def _criar_tabelas(self) -> None:
         with self._conectar() as conn:
             cur = conn.cursor()
+
+            # Tabela de usuários
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS usuarios (
@@ -54,16 +55,19 @@ class SQLiteRepository:
                 )
                 """
             )
+
+            # Tabela de resultados com id autoincremento
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS resultados (
-                    email        TEXT PRIMARY KEY,
-                    tempo        BLOB NOT NULL,
-                    nivel_ideal  BLOB NOT NULL,
-                    nivel_aluno  BLOB NOT NULL,
-                    erro_medio   REAL NOT NULL,
-                    altura_max   REAL NOT NULL,
-                    tempo_total  INTEGER NOT NULL,
+                    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email       TEXT NOT NULL,
+                    tempo       BLOB NOT NULL,
+                    nivel_ideal BLOB NOT NULL,
+                    nivel_aluno BLOB NOT NULL,
+                    erro_medio  REAL NOT NULL,
+                    altura_max  REAL NOT NULL,
+                    tempo_total INTEGER NOT NULL,
                     FOREIGN KEY(email) REFERENCES usuarios(email)
                 )
                 """
@@ -90,7 +94,10 @@ class SQLiteRepository:
     def obter_usuario(self, email: str) -> Optional[Usuario]:
         with self._conectar() as conn:
             cur = conn.cursor()
-            cur.execute("SELECT nome, email, tipo FROM usuarios WHERE email = ?", (email,))
+            cur.execute(
+                "SELECT nome, email, tipo FROM usuarios WHERE email = ?",
+                (email,),
+            )
             row = cur.fetchone()
 
         if row is None:
@@ -101,14 +108,15 @@ class SQLiteRepository:
     # ---------- Resultados ----------
 
     def salvar_resultado(self, email: str, resultado: ResultadoExperimento) -> None:
-        import numpy as np
-        
+        import numpy as np  # noqa: F401
+
         tempo_bytes = resultado.tempo.tobytes()
         ideal_bytes = resultado.nivel_ideal.tobytes()
         aluno_bytes = resultado.nivel_aluno.tobytes()
 
         with self._conectar() as conn:
             cur = conn.cursor()
+            # Insere sempre um novo registro (não sobrescreve por e-mail)
             cur.execute(
                 """
                 INSERT INTO resultados (
@@ -116,13 +124,6 @@ class SQLiteRepository:
                     erro_medio, altura_max, tempo_total
                 )
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(email) DO UPDATE SET
-                    tempo       = excluded.tempo,
-                    nivel_ideal = excluded.nivel_ideal,
-                    nivel_aluno = excluded.nivel_aluno,
-                    erro_medio  = excluded.erro_medio,
-                    altura_max  = excluded.altura_max,
-                    tempo_total = excluded.tempo_total
                 """,
                 (
                     email,
@@ -141,12 +142,15 @@ class SQLiteRepository:
 
         with self._conectar() as conn:
             cur = conn.cursor()
+            # Pega o último resultado desse usuário (maior id)
             cur.execute(
                 """
                 SELECT tempo, nivel_ideal, nivel_aluno,
                        erro_medio, altura_max, tempo_total
                 FROM resultados
                 WHERE email = ?
+                ORDER BY id DESC
+                LIMIT 1
                 """,
                 (email,),
             )
@@ -169,3 +173,50 @@ class SQLiteRepository:
             altura_maxima=altura_max,
             tempo_total=tempo_total,
         )
+
+    def listar_todos_resultados(self):
+        """Retorna todos os resultados como lista de dicts, ordenados por desempenho."""
+        import numpy as np
+
+        with self._conectar() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                SELECT id, email, tempo, nivel_ideal, nivel_aluno,
+                       erro_medio, altura_max, tempo_total
+                FROM resultados
+                ORDER BY erro_medio ASC, tempo_total ASC
+                """
+            )
+            rows = cur.fetchall()
+
+        resultados = []
+        for row in rows:
+            (
+                _id,
+                email,
+                tempo_bytes,
+                ideal_bytes,
+                aluno_bytes,
+                erro_medio,
+                altura_max,
+                tempo_total,
+            ) = row
+
+            tempo = np.frombuffer(tempo_bytes, dtype=np.float64)
+            nivel_ideal = np.frombuffer(ideal_bytes, dtype=np.float64)
+            nivel_aluno = np.frombuffer(aluno_bytes, dtype=np.float64)
+
+            resultados.append(
+                {
+                    "email": email,
+                    "erro_medio": erro_medio,
+                    "altura_max": altura_max,
+                    "tempo_total": tempo_total,
+                    "tempo": tempo,
+                    "nivel_ideal": nivel_ideal,
+                    "nivel_aluno": nivel_aluno,
+                }
+            )
+
+        return resultados

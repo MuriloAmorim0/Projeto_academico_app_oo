@@ -24,7 +24,6 @@ if "usuario" not in st.session_state:
 def ir_para(pagina: str):
     st.session_state["pagina"] = pagina
 
-
 # ---------------- CSS BÁSICO DARK ----------------
 st.markdown("""
 <style>
@@ -208,7 +207,7 @@ def tela_resultados():
         st.warning("Faça login ou cadastro antes de ver os resultados.")
         return
 
-    # pega o último experimento desse usuário
+    # pega o último experimento desse usuário (para os cards pessoais)
     res = service.obter_ultimo_resultado(usuario.email)
 
     st.markdown(
@@ -221,34 +220,43 @@ def tela_resultados():
             "<p style='text-align:center; color:gray;'>Nenhuma simulação foi executada ainda.</p>",
             unsafe_allow_html=True,
         )
-        return
-
-    # cards individuais
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Altura máxima (m)", f"{res.altura_maxima:.2f}")
-    with col2:
-        st.metric("Erro médio", f"{res.erro_medio:.4f}")
-    with col3:
-        st.metric("Tempo total (s)", f"{res.tempo_total}")
+    else:
+        # cards individuais
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Altura máxima (m)", f"{res.altura_maxima:.2f}")
+        with col2:
+            st.metric("Erro médio", f"{res.erro_medio:.4f}")
+        with col3:
+            st.metric("Tempo total (s)", f"{res.tempo_total}")
 
     st.divider()
 
-    # TABELA RESUMO (uma linha para o usuário logado)
-    st.subheader("Resultados em tabela")
+    # ---------- RANKING GERAL ----------
+    st.subheader("Ranking geral de experimentos")
 
-    df_resumo = pd.DataFrame(
+    # busca todos os resultados ordenados
+    resultados = service.listar_todos_resultados()
+
+    if not resultados:
+        st.info("Ainda não há resultados salvos no sistema.")
+        return
+
+    df_rank = pd.DataFrame(
         [
             {
-                "Nome do usuário": usuario.nome,
-                "Altura máxima (m)": res.altura_maxima,
-                "Erro médio": res.erro_medio,
-                "Tempo total (s)": res.tempo_total,
+                "E-mail": r["email"],
+                "Erro médio": r["erro_medio"],
+                "Altura máxima (m)": r["altura_max"],
+                "Tempo total (s)": r["tempo_total"],
             }
+            for r in resultados
         ]
     )
 
-    st.dataframe(df_resumo)
+    df_rank.insert(0, "Posição", range(1, len(df_rank) + 1))
+
+    st.dataframe(df_rank, use_container_width=True)
 
 # ---------------- ROTEAMENTO ----------------
 pagina = st.session_state["pagina"]
